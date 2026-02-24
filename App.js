@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, ScrollView, Platform, createElement, Linking } from 'react-native';
 import { searchFlights } from './utils/amadeus'; 
+import ItineraryPlanner from './ItineraryPlanner'; // Make sure the path matches where you saved it!
 
-const GEMINI_API_KEY = 'AIzaSyDKk1WfsLRcHg7pKow0d8uQRGtH6fI4gO8';
+const GEMINI_API_KEY = '';
 
 // --- HELPER FUNCTIONS ---
 const formatTime = (isoString) => new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -320,12 +321,25 @@ export default function App() {
     const isGround = selectedRoute.type === 'GROUND_ONLY' || selectedRoute.type === 'OVERLAND_CHAIN';
     return (
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.header}>Your Impact Dashboard</Text>
-        
         <View style={styles.summaryBox}>
-          <Text style={styles.summaryTitle}>Total Footprint: {selectedRoute.totals.co2}kg CO2</Text>
-          <Text style={styles.summaryCarbon}>{getCarbonEquivalency(selectedRoute.totals.co2)}</Text>
+          <Text style={styles.summaryTitle}>Trip Total</Text>
+          <Text style={styles.summaryPrice}>${selectedRoute.totals.price.toFixed(2)}</Text>
+          <Text style={styles.summaryCarbon}>Total Footprint: {selectedRoute.totals.co2}kg CO2</Text>
         </View>
+        
+        {/* NEW BUTTON: Transitions to the Itinerary Planner */}
+        <TouchableOpacity 
+          style={[styles.primaryButton, {backgroundColor: '#10B981', marginBottom: 10}]} 
+          onPress={() => setScreen('ITINERARY')}
+        >
+          <Text style={styles.buttonText}>Plan My Days in {destinationCity} ➔</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.primaryButton, {backgroundColor: '#555'}]} onPress={() => setScreen('ROUTE_SELECTION')}>
+          <Text style={styles.buttonText}>Back to Transport Options</Text>
+        </TouchableOpacity>
+
+        
 
         {isGround ? (
             <View style={[styles.card, styles.groundCard]}>
@@ -381,6 +395,23 @@ export default function App() {
         
         <TouchableOpacity style={[styles.primaryButton, {backgroundColor: '#555', marginTop: 20}]} onPress={() => setScreen('ROUTE_SELECTION')}><Text style={styles.buttonText}>Back to Options</Text></TouchableOpacity>
       </ScrollView>
+    );
+  }
+
+  if (screen === 'ITINERARY') {
+    return (
+      <View style={{ flex: 1, width: '100%' }}>
+        {/* We pass your dynamic destinationCity directly into the component! */}
+        <ItineraryPlanner destination={destinationCity} />
+        
+        {/* A back button so they don't get stuck */}
+        <TouchableOpacity 
+          style={{ padding: 15, backgroundColor: '#555', alignItems: 'center' }} 
+          onPress={() => setScreen('DASHBOARD')}
+        >
+          <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Back to Transport Dashboard</Text>
+        </TouchableOpacity>
+      </View>
     );
   }
 
