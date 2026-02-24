@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, ScrollView, Platform, createElement, Linking } from 'react-native';
 import { searchFlights } from './utils/amadeus'; 
 
-const GEMINI_API_KEY = 'AIzaSyDKk1WfsLRcHg7pKow0d8uQRGtH6fI4gO8';
+const GEMINI_API_KEY = 'API_KEY';
 
 // --- HELPER FUNCTIONS ---
 const formatTime = (isoString) => new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
