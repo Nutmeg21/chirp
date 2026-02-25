@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator,
 import { searchFlights } from './utils/amadeus'; 
 import ItineraryPlanner from './ItineraryPlanner'; // Make sure the path matches where you saved it!
 
-const GEMINI_API_KEY = 'AIzaSyD7FSKehZ_H8K-nrL0OxwVGuTfWhK_VOOM';
+const GEMINI_API_KEY = '';
 
 // --- HELPER FUNCTIONS ---
 const formatTime = (isoString) => new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });

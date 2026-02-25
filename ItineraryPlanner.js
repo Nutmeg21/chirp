@@ -47,7 +47,7 @@ const customIcon = Platform.OS === 'web' ? new L.Icon({
 }) : null;
 
 // REMEMBER TO REGENERATE THIS KEY AFTER YOUR HACKATHON
-const GEMINI_API_KEY = 'AIzaSyD7FSKehZ_H8K-nrL0OxwVGuTfWhK_VOOM'; 
+const GEMINI_API_KEY = ''; 
 
 export default function ItineraryPlanner({ destination }) {
   const [days, setDays] = useState('3');
