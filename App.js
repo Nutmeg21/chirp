@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, ScrollView, Platform, createElement, Linking } from 'react-native';
 import { searchFlights } from './utils/amadeus'; 
-import ItineraryPlanner from './ItineraryPlanner'; // Make sure the path matches where you saved it!
+import ItineraryPlanner from './ItineraryPlanner'; 
+import ItineraryWizard from './itineraryWizard'; // NEW: Imported the Wizard!
 
-const GEMINI_API_KEY = '';
+const GEMINI_API_KEY = 'AIzaSyARaC8O6dXJ9GB951HSkiH-OZZGrBkLskc';
 
 // --- HELPER FUNCTIONS ---
 const formatTime = (isoString) => new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -21,7 +22,7 @@ const getLayoverString = (segments) => {
   const layovers = segments.slice(0, -1).map(s => s.arrival.iataCode);
   return `Connecting flight with layover(s) in ${layovers.join(', ')}.`;
 };
-const getMapsLink = (start, end) => `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(start)}&destination=${encodeURIComponent(end)}&travelmode=transit`;
+const getMapsLink = (start, end) => `http://googleusercontent.com/maps.google.com/maps?saddr=${encodeURIComponent(start)}&daddr=${encodeURIComponent(end)}&dirflg=r`;
 
 const getCarbonEquivalency = (kg) => {
   const trees = Math.max(1, Math.round(kg / 25));
@@ -93,7 +94,6 @@ export default function App() {
   const [destinationCity, setDestinationCity] = useState('');
   const [date, setDate] = useState('');
   
-  // NEW STATE: Arrival Time Preference
   const [arrivePref, setArrivePref] = useState('Anytime'); 
   
   const [loadingText, setLoadingText] = useState('');
@@ -102,10 +102,41 @@ export default function App() {
   const [cityCache, setCityCache] = useState({}); 
   const [sortBy, setSortBy] = useState('eco'); 
 
+  // NEW: State to hold the answers from the Itinerary Wizard!
+  const [itineraryPrefs, setItineraryPrefs] = useState(null);
+
   const handleSearch = async () => {
     if (!originCity || !destinationCity || !date) return alert("Fill all fields.");
     setScreen('PROCESSING');
     
+    // 🛑 THE HACKATHON LIFESAVER: Mock Data Bypass
+    // Because Google locked your burner account to 0 quota, this forces the app to work!
+    const USE_MOCK_DATA = true;
+
+    if (USE_MOCK_DATA) {
+      setLoadingText('Bypassing blocked API (Using Mock Data)...');
+      setTimeout(() => {
+        setRouteOptions([
+          {
+            type: 'MULTI_MODAL',
+            flight: { airline: 'SkyHack Airlines', isDirect: true, depTime: '10:00 AM', arrTime: '12:30 PM', duration: '2h 30m', durationMins: 150, price: 120, co2: 95, layoverDesc: 'Non-stop direct flight.', url: 'https://skyscanner.com' },
+            firstMile: { provider: 'City Express Bus', price: 15, co2: 8, url: 'https://12go.asia' },
+            lastMile: { provider: 'Airport Monorail', price: 8, co2: 2, url: 'https://12go.asia' },
+            totals: { price: 143, co2: 105 },
+            isEcoChampion: false
+          },
+          {
+            type: 'OVERLAND_CHAIN',
+            directGround: { provider: 'Scenic Intercity Railway', price: 65, co2: 18, duration: '8h 15m', durationMins: 495, depTime: '08:00 AM', arrTime: '04:15 PM', layoverDesc: 'Direct high-speed rail.', url: 'https://12go.asia' },
+            totals: { price: 65, co2: 18 },
+            isEcoChampion: true
+          }
+        ]);
+        setScreen('ROUTE_SELECTION');
+      }, 1500);
+      return; 
+    }
+
     try {
       setLoadingText('Locating transport hubs...');
       let originIATA = cityCache[originCity];
@@ -113,11 +144,21 @@ export default function App() {
 
       if (!originIATA || !destIATA) {
         const promptIATA = `Return ONLY a JSON object with the 3-letter IATA codes for the nearest MASSIVE INTERNATIONAL HUB airports to: Location 1: ${originCity}, Location 2: ${destinationCity}. Format: {"origin": "CODE", "destination": "CODE"}`;
-        const resIATA = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        const resIATA = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ contents: [{ parts: [{ text: promptIATA }] }], generationConfig: { responseMimeType: "application/json" } })
         });
+        
         const dataIATA = await resIATA.json();
+        
+        // 🛡️ THE RESTORED SAFETY NET (Prevents the 'reading 0' crash)
+        if (!resIATA.ok || !dataIATA.candidates) {
+            console.error("GEMINI API ERROR:", dataIATA);
+            alert(`API Blocked: ${dataIATA.error?.message || "Your new Google Account has 0 quota. Please turn USE_MOCK_DATA to true!"}`);
+            setScreen('LAUNCHPAD');
+            return;
+        }
+
         const codes = JSON.parse(dataIATA.candidates[0].content.parts[0].text);
         originIATA = codes.origin; destIATA = codes.destination;
         setCityCache(prev => ({ ...prev, [originCity]: originIATA, [destinationCity]: destIATA }));
@@ -132,7 +173,7 @@ export default function App() {
           Return an ARRAY of 3 distinct options, prioritizing schedules that arrive ${arrivePref === 'Anytime' ? 'throughout the day' : `in the ${arrivePref}`}.
           STRICT: Return JSON ARRAY ONLY. Format: [ { "provider": "Train Express", "price": 15, "co2": 10, "url": "https://12go.asia", "duration": "1h", "durationMins": 60, "depTime": "09:00 AM", "arrTime": "10:30 AM" }, ... ]
         `;
-        const resReg = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        const resReg = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: promptRegional }] }], tools: [{ googleSearch: {} }], generationConfig: { responseMimeType: "application/json" } })
         });
         const dataReg = await resReg.json();
@@ -167,7 +208,7 @@ export default function App() {
           If possible, build the chain arriving ${arrivePref === 'Anytime' ? 'at a reasonable time' : `in the ${arrivePref}`}. Return JSON ONLY.
           Format: { "possible": true, "provider": "Multi-Stop Train Chain", "price": 120, "co2": 25, "duration": "24h", "durationMins": 1470, "depTime": "08:00 AM", "arrTime": "08:30 AM (+1)", "layoverDesc": "Scenic route via transit hubs.", "url": "https://12go.asia" }
         `;
-        const resOverland = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        const resOverland = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: promptOverland }] }], tools: [{ googleSearch: {} }], generationConfig: { responseMimeType: "application/json" } })
         });
         const dataOverland = await resOverland.json();
@@ -184,7 +225,6 @@ export default function App() {
       let finalRoutes = [];
 
       if (realFlights && realFlights.length > 0) {
-        // Simple local filter to prioritize flights matching arrival preference if possible
         let filteredFlights = realFlights;
         if (arrivePref !== 'Anytime') {
             filteredFlights = realFlights.sort((a, b) => {
@@ -216,7 +256,7 @@ export default function App() {
         
         let aiGroundOptions = [{}, {}, {}];
         try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: promptMaster }] }], generationConfig: { responseMimeType: "application/json" } })
           });
           const data = await response.json();
@@ -327,10 +367,10 @@ export default function App() {
           <Text style={styles.summaryCarbon}>Total Footprint: {selectedRoute.totals.co2}kg CO2</Text>
         </View>
         
-        {/* NEW BUTTON: Transitions to the Itinerary Planner */}
+        {/* CHANGED: Transitions to the new Wizard instead of the Planner directly */}
         <TouchableOpacity 
           style={[styles.primaryButton, {backgroundColor: '#10B981', marginBottom: 10}]} 
-          onPress={() => setScreen('ITINERARY')}
+          onPress={() => setScreen('ITINERARY_WIZARD')} 
         >
           <Text style={styles.buttonText}>Plan My Days in {destinationCity} ➔</Text>
         </TouchableOpacity>
@@ -338,8 +378,6 @@ export default function App() {
         <TouchableOpacity style={[styles.primaryButton, {backgroundColor: '#555'}]} onPress={() => setScreen('ROUTE_SELECTION')}>
           <Text style={styles.buttonText}>Back to Transport Options</Text>
         </TouchableOpacity>
-
-        
 
         {isGround ? (
             <View style={[styles.card, styles.groundCard]}>
@@ -361,7 +399,6 @@ export default function App() {
                   <Text style={styles.carbonText}>🌱 {selectedRoute.firstMile.co2}kg CO2</Text>
                 </View>
                 <TouchableOpacity style={styles.linkButton} onPress={() => Linking.openURL(getMapsLink(originCity, selectedRoute.flight.originIATA + " Airport"))}><Text style={styles.linkText}>🗺️ Maps Link</Text></TouchableOpacity>
-                {/* RESTORED BOOKING LINK */}
                 <TouchableOpacity style={[styles.linkButton, {marginTop: 10, backgroundColor: '#FFF'}]} onPress={() => Linking.openURL(selectedRoute.firstMile.url)}><Text style={styles.linkText}>Search Ground Tickets</Text></TouchableOpacity>
               </View>
             )}
@@ -386,7 +423,6 @@ export default function App() {
                   <Text style={styles.carbonText}>🌱 {selectedRoute.lastMile.co2}kg CO2</Text>
                 </View>
                 <TouchableOpacity style={styles.linkButton} onPress={() => Linking.openURL(getMapsLink(selectedRoute.flight.destIATA + " Airport", destinationCity))}><Text style={styles.linkText}>🗺️ Maps Link</Text></TouchableOpacity>
-                {/* RESTORED BOOKING LINK */}
                 <TouchableOpacity style={[styles.linkButton, {marginTop: 10, backgroundColor: '#FFF'}]} onPress={() => Linking.openURL(selectedRoute.lastMile.url)}><Text style={styles.linkText}>Search Ground Tickets</Text></TouchableOpacity>
               </View>
             )}
@@ -398,13 +434,30 @@ export default function App() {
     );
   }
 
-  if (screen === 'ITINERARY') {
+  // NEW: The Questionnaire screen
+  if (screen === 'ITINERARY_WIZARD') {
+    return (
+      <ItineraryWizard 
+        destination={destinationCity} 
+        onComplete={(prefs) => { 
+          setItineraryPrefs(prefs); 
+          setScreen('ITINERARY_RESULT'); // Jump to the planner when wizard finishes
+        }} 
+        onBack={() => setScreen('DASHBOARD')} 
+      />
+    );
+  }
+
+  // NEW: The actual generated AI Itinerary and Map screen
+  if (screen === 'ITINERARY_RESULT') {
     return (
       <View style={{ flex: 1, width: '100%' }}>
-        {/* We pass your dynamic destinationCity directly into the component! */}
-        <ItineraryPlanner destination={destinationCity} />
+        <ItineraryPlanner 
+          destination={destinationCity} 
+          preferences={itineraryPrefs} 
+          onBack={() => setScreen('ITINERARY_WIZARD')} 
+        />
         
-        {/* A back button so they don't get stuck */}
         <TouchableOpacity 
           style={{ padding: 15, backgroundColor: '#555', alignItems: 'center' }} 
           onPress={() => setScreen('DASHBOARD')}
@@ -426,7 +479,6 @@ export default function App() {
         <View style={{ zIndex: 2, elevation: 2 }}><LiveCityAutocomplete placeholder="Destination" onLocationSelected={setDestinationCity} /></View>
         <View style={{ zIndex: 1, elevation: 1 }}><WebDatePicker date={date} setDate={setDate} /></View>
         
-        {/* NEW UX: Arrival Time Segmented Control */}
         <Text style={styles.timeLabel}>Preferred Arrival Time:</Text>
         <View style={styles.timeSelector}>
           {['Anytime', 'Morning', 'Afternoon', 'Evening'].map(time => (
@@ -477,6 +529,7 @@ const styles = StyleSheet.create({
   linkText: { color: '#2E8B57', fontWeight: 'bold', fontSize: 16 },
   summaryBox: { backgroundColor: '#2E8B57', padding: 20, borderRadius: 12, marginBottom: 20, alignItems: 'center' },
   summaryTitle: { fontSize: 22, fontWeight: 'bold', color: '#FFF', marginBottom: 10 },
+  summaryPrice: { fontSize: 28, fontWeight: 'bold', color: '#FFF', marginBottom: 5 },
   summaryCarbon: { fontSize: 16, color: '#E8F5E9', fontWeight: '600', textAlign: 'center', lineHeight: 24 },
   filterBar: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginBottom: 20, gap: 10 },
   filterBtn: { backgroundColor: '#E8F5E9', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, borderWidth: 1, borderColor: '#A5D6A7' },

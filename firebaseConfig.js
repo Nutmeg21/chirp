@@ -8,7 +8,7 @@ import { getAnalytics } from "firebase/analytics";
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "API_KEY",
+  apiKey: "AIzaSyCJGn3KIQViWhraX8inX_gjGdOX7u4NdII",
   authDomain: "sojourner-travel.firebaseapp.com",
   projectId: "sojourner-travel",
   storageBucket: "sojourner-travel.firebasestorage.app",
