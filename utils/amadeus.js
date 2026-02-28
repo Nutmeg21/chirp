@@ -2,8 +2,8 @@
 import axios from 'axios';
 
 // ---> PASTE YOUR AMADEUS KEYS HERE <---
-const CLIENT_ID = 'TGosCJ672YclFqWeWNEzN0aZt1ay65av';
-const CLIENT_SECRET = 'o20VRw9a6gKmNlrB';
+const CLIENT_ID = '';
+const CLIENT_SECRET = '';
 
 let accessToken = null;
 
